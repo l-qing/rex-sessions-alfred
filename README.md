@@ -94,6 +94,14 @@ program with no matching glyph gets the generic terminal icon.
 - **The picker** reads only that cache. When the cache is stale, it starts a detached
   refresh and asks Alfred to rerun until the refresh finishes. A lock that records the
   refresh's PID keeps two refreshes from overlapping.
+- **Jumping.** ↵ asks the tab's server to switch this Mac's Rex app with
+  `rex -C <client> do session.select`. A Rex app on another Mac can be connected to the
+  same server, so the workflow names this Mac's app: on the local server it is the app
+  connected over the unix socket, and on a remote host it is the app with the same
+  label. If it can't tell which app is this Mac's (for example, the app has no label),
+  it leaves `-C` out, which works only when one app is connected. The reasons are
+  written to `rex-sessions.log` in the workflow's cache folder
+  (`~/Library/Caches/com.runningwithcrayons.Alfred/Workflow Data/<bundle id>/`).
 - **Icons.** The workflow ships no Rex artwork. On first run, the bundled
   `extract_rex_icons` helper (Swift) renders Rex's program glyphs from your installed
   Rex app into the cache, and renders them again after Rex updates.

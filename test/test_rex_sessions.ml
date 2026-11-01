@@ -116,6 +116,40 @@ let test_action_round_trip () =
   check "empty session name is rejected" (Tab_action.action_of_argument "new:" = None);
   check "flag-like session name is rejected" (Tab_action.action_of_argument "new:-x foo" = None)
 
+(* Shaped like `rex client ls --json`: a command-line client with no info, two apps
+   (one on this Mac over unix, one over tailscale), and a helper of another kind. *)
+let client_list_json ~local_label ~remote_label =
+  Yojson.Safe.from_string
+    (Printf.sprintf
+       {|{"clients": [
+          {"client_id": "client:cli", "principal": {"transport": "unix"}},
+          {"client_id": "client:here", "info": {"kind": "app", "label": %S},
+           "principal": {"transport": "unix"}},
+          {"client_id": "client:there", "info": {"kind": "app", "label": %S},
+           "principal": {"transport": "tailscale"}},
+          {"client_id": "client:hook", "info": {"kind": "other"},
+           "principal": {"transport": "unix"}}
+        ]}|}
+       local_label remote_label)
+
+let test_app_clients () =
+  let clients = Rex_client.app_clients_of_json (client_list_json ~local_label:"laptop" ~remote_label:"mini") in
+  let id = Option.map (fun (client : Rex_client.app_client) -> client.client_id) in
+  check "only app clients are kept" (List.length clients = 2);
+  check "local app is the unix one" (id (Rex_client.local_app_client clients) = Some "client:here");
+  check "label finds the app over tailscale"
+    (id (Rex_client.app_client_with_label "mini" clients) = Some "client:there");
+  check "unknown label finds nothing" (Rex_client.app_client_with_label "desk" clients = None);
+  check "empty label finds nothing"
+    (Rex_client.app_client_with_label ""
+       (Rex_client.app_clients_of_json (client_list_json ~local_label:"" ~remote_label:""))
+    = None);
+  check "shared label finds nothing"
+    (Rex_client.app_client_with_label "same"
+       (Rex_client.app_clients_of_json (client_list_json ~local_label:"same" ~remote_label:"same"))
+    = None);
+  check "no clients field" (Rex_client.app_clients_of_json (`Assoc []) = [])
+
 let test_index_round_trip () =
   let tab = make_tab ~host:(Host.Remote "devbox") ~terminal_title:"Claude Code" "notes" "drafts" in
   let index =
@@ -285,6 +319,7 @@ let () =
   test_capture_cleanup ();
   test_action_round_trip ();
   test_index_round_trip ();
+  test_app_clients ();
   if !failures > 0 then begin
     Printf.printf "%d check(s) failed\n" !failures;
     exit 1

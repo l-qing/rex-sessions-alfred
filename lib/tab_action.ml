@@ -48,17 +48,25 @@ let action_of_argument argument =
       | "new" when is_valid_session_name rest -> Some (Create_local_session rest)
       | _ -> None)
 
+(* -C for this Mac's Rex app on the host's server. When it can't be found, leave -C
+   out: rex then still works if only one app is connected. *)
+let client_flags host =
+  match Rex_client.client_id_for_host host with
+  | Some client_id -> [ "-C"; client_id ]
+  | None -> []
+
 (* The Rex app is a client of every host it shows, so ask the tab's own server to
-   switch it; with one app connected, rex picks that client without -C. *)
+   switch it. Apps on other Macs can be connected to that server too, so name ours. *)
 let go_to_tab target =
   let result =
     Rex_cli.run_rex target.host
-      [
+      (client_flags target.host
+      @ [
         "do";
         "session.select";
         "session_id=" ^ target.session_id;
         "window_id=" ^ target.window_id;
-      ]
+      ])
   in
   if not (Process.succeeded result) then begin
     Activity_log.log_line "go to tab failed: %s" (Rex_cli.error_message_of_result result);
@@ -119,7 +127,9 @@ let create_local_session name =
   else begin
     (match session_id_of_new_session_output result.stdout with
     | Some session_id ->
-        ignore (Rex_cli.run_rex Host.Local [ "do"; "session.select"; "session_id=" ^ session_id ])
+        ignore
+          (Rex_cli.run_rex Host.Local
+             (client_flags Host.Local @ [ "do"; "session.select"; "session_id=" ^ session_id ]))
     | None -> Activity_log.log_line "rex new printed no session_id: %s" result.stdout);
     Macos.bring_rex_to_front ();
     Cache_index.mark_index_stale ()
